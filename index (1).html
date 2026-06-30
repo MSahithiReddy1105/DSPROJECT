@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ledger — Retail Sales Forecaster</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --paper:#f7f3ea;
+    --ink:#2b2620;
+    --rust:#b5532c;
+    --sage:#5c6b4f;
+    --line:#d8cfba;
+    --gold:#c89b3c;
+    --card:#fffdf8;
+    --muted:#7a7163;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Iowan Old Style','Georgia',serif;
+  }
+  .util{font-family:'Courier New',monospace; letter-spacing:.04em;}
+  header{
+    display:flex; justify-content:space-between; align-items:flex-end;
+    padding:36px 48px 18px; border-bottom:3px double var(--ink);
+  }
+  .brand{display:flex; align-items:baseline; gap:14px;}
+  .brand h1{font-size:34px; margin:0; font-weight:700; letter-spacing:.01em;}
+  .brand span{font-family:'Courier New',monospace; font-size:12px; color:var(--rust); text-transform:uppercase; letter-spacing:.18em;}
+  .stamp{font-family:'Courier New',monospace; font-size:11px; color:var(--muted); text-align:right; line-height:1.6;}
+  nav{
+    display:flex; gap:0; padding:0 48px; border-bottom:1px solid var(--line); background:var(--card);
+  }
+  nav button{
+    font-family:'Courier New',monospace; font-size:12px; letter-spacing:.1em; text-transform:uppercase;
+    background:none; border:none; padding:14px 20px; cursor:pointer; color:var(--muted); border-bottom:3px solid transparent;
+  }
+  nav button.active{color:var(--ink); border-bottom-color:var(--rust); font-weight:700;}
+  main{padding:38px 48px 80px; max-width:1280px; margin:0 auto;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .grid-stats{display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-bottom:32px;}
+  .stat{background:var(--card); border:1px solid var(--line); padding:20px 22px; position:relative;}
+  .stat::before{content:attr(data-tag); position:absolute; top:10px; right:14px; font-family:'Courier New',monospace; font-size:10px; color:var(--gold); letter-spacing:.1em;}
+  .stat .num{font-size:30px; font-weight:700; margin-top:6px;}
+  .stat .lbl{font-family:'Courier New',monospace; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-top:4px;}
+  .stat .delta{font-size:12px; margin-top:8px; font-family:'Courier New',monospace;}
+  .delta.up{color:var(--sage);}
+  .delta.down{color:var(--rust);}
+  .row{display:grid; grid-template-columns:2fr 1fr; gap:18px; margin-bottom:18px;}
+  .card{background:var(--card); border:1px solid var(--line); padding:24px;}
+  .card h2{font-size:16px; margin:0 0 4px; letter-spacing:.01em;}
+  .card .sub{font-family:'Courier New',monospace; font-size:11px; color:var(--muted); margin-bottom:18px; text-transform:uppercase; letter-spacing:.06em;}
+  canvas{max-width:100%;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{text-align:left; padding:9px 6px; border-bottom:1px solid var(--line);}
+  th{font-family:'Courier New',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);}
+  .pill{display:inline-block; padding:2px 8px; font-family:'Courier New',monospace; font-size:10px; border:1px solid currentColor;}
+  .pill.promo{color:var(--rust);}
+  .pill.none{color:var(--muted);}
+  .controls{display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; margin-bottom:22px; padding:18px 22px; background:var(--card); border:1px solid var(--line);}
+  .field{display:flex; flex-direction:column; gap:5px;}
+  .field label{font-family:'Courier New',monospace; font-size:10px; text-transform:uppercase; color:var(--muted); letter-spacing:.07em;}
+  select,input[type=number],input[type=range]{
+    font-family:'Courier New',monospace; padding:7px 10px; border:1px solid var(--ink); background:var(--paper); color:var(--ink); font-size:13px;
+  }
+  button.go{
+    font-family:'Courier New',monospace; background:var(--rust); color:#fff; border:none; padding:9px 18px; cursor:pointer; letter-spacing:.06em; text-transform:uppercase; font-size:12px;
+  }
+  button.go:hover{background:#9a4424;}
+  .upload-box{border:2px dashed var(--line); padding:40px; text-align:center; background:var(--card); cursor:pointer; margin-bottom:24px;}
+  .upload-box:hover{border-color:var(--rust);}
+  .upload-box p{font-family:'Courier New',monospace; font-size:12px; color:var(--muted); margin:6px 0 0;}
+  .upload-box strong{font-size:16px;}
+  .legend-note{font-family:'Courier New',monospace; font-size:11px; color:var(--muted); margin-top:10px;}
+  footer{padding:20px 48px; border-top:1px solid var(--line); font-family:'Courier New',monospace; font-size:11px; color:var(--muted); text-align:center;}
+  .scenario-impact{font-size:42px; font-weight:700; color:var(--rust); margin:14px 0 0;}
+  .badge-row{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
+  .badge{font-family:'Courier New',monospace; font-size:10px; padding:3px 9px; border:1px solid var(--line); color:var(--muted);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>Ledger</h1>
+    <span>Retail Sales Forecaster</span>
+  </div>
+  <div class="stamp">
+    SEASONAL · PROMOTIONAL · HISTORICAL<br>
+    EST. FY2026 PROJECTION MODEL
+  </div>
+</header>
+
+<nav>
+  <button data-panel="dashboard" class="active">Dashboard</button>
+  <button data-panel="upload">Upload Data</button>
+  <button data-panel="forecast">Forecast</button>
+  <button data-panel="scenario">Scenarios</button>
+  <button data-panel="reports">Reports</button>
+</nav>
+
+<main>
+
+  <!-- DASHBOARD -->
+  <section class="panel active" id="dashboard">
+    <div class="grid-stats">
+      <div class="stat" data-tag="YTD"><div class="num" id="statRevenue">—</div><div class="lbl">Total Revenue</div><div class="delta up" id="statRevenueDelta"></div></div>
+      <div class="stat" data-tag="AVG"><div class="num" id="statAvg">—</div><div class="lbl">Avg Monthly Sales</div><div class="delta" id="statAvgDelta"></div></div>
+      <div class="stat" data-tag="YoY"><div class="num" id="statGrowth">—</div><div class="lbl">Year-over-Year Growth</div><div class="delta up" id="statGrowthDelta"></div></div>
+      <div class="stat" data-tag="TOP"><div class="num" id="statTop">—</div><div class="lbl">Top Category</div><div class="delta" id="statTopDelta"></div></div>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h2>Monthly Revenue — Last 24 Months</h2>
+        <div class="sub">Actuals, with promotional months marked</div>
+        <canvas id="historyChart" height="110"></canvas>
+      </div>
+      <div class="card">
+        <h2>Category Share</h2>
+        <div class="sub">Trailing 12 months</div>
+        <canvas id="categoryChart" height="180"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Seasonal Index</h2>
+      <div class="sub">How each month compares to the yearly average (100 = average)</div>
+      <canvas id="seasonalChart" height="80"></canvas>
+    </div>
+  </section>
+
+  <!-- UPLOAD -->
+  <section class="panel" id="upload">
+    <div class="card" style="margin-bottom:22px;">
+      <h2>Upload Historical Sales Data</h2>
+      <div class="sub">CSV columns expected: date, category, units_sold, revenue, promotion</div>
+      <div class="upload-box" id="dropZone">
+        <strong>Drop a CSV here, or click to browse</strong>
+        <p>date, category, units_sold, revenue, promotion (yes/no)</p>
+        <input type="file" id="fileInput" accept=".csv" style="display:none;">
+      </div>
+      <div class="legend-note" id="uploadStatus">No file loaded — currently showing built-in sample data (24 months, 4 categories).</div>
+    </div>
+    <div class="card">
+      <h2>Loaded Records</h2>
+      <div class="sub">Most recent 10 rows</div>
+      <table id="dataTable">
+        <thead><tr><th>Date</th><th>Category</th><th>Units</th><th>Revenue</th><th>Promotion</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- FORECAST -->
+  <section class="panel" id="forecast">
+    <div class="controls">
+      <div class="field">
+        <label>Months to forecast</label>
+        <select id="horizonSelect">
+          <option value="3">3 months</option>
+          <option value="6" selected>6 months</option>
+          <option value="12">12 months</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Promotion boost (%)</label>
+        <input type="number" id="promoBoost" value="15" min="0" max="100" style="width:70px;">
+      </div>
+      <button class="go" id="runForecast">Run Forecast</button>
+    </div>
+
+    <div class="card">
+      <h2>Actual vs. Forecasted Sales</h2>
+      <div class="sub">Forecast model: seasonal-naive trend with promotion adjustment</div>
+      <canvas id="forecastChart" height="100"></canvas>
+      <div class="badge-row">
+        <span class="badge">Model: Seasonal Decomposition + Linear Trend</span>
+        <span class="badge" id="confBadge">Confidence band: ±8%</span>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:18px;">
+      <div class="card">
+        <h2>Forecast Detail</h2>
+        <div class="sub">Projected month-by-month figures</div>
+        <table id="forecastTable">
+          <thead><tr><th>Month</th><th>Forecast Revenue</th><th>Low</th><th>High</th><th>Promo Applied</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2>Drivers</h2>
+        <div class="sub">What's shaping this projection</div>
+        <p style="font-size:13px; line-height:1.7;" id="driversText"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENARIO -->
+  <section class="panel" id="scenario">
+    <div class="controls">
+      <div class="field">
+        <label>Add promotion in month</label>
+        <select id="scenarioMonth"></select>
+      </div>
+      <div class="field">
+        <label>Marketing spend change (%)</label>
+        <input type="range" id="marketingSlider" min="-30" max="50" value="0">
+        <span class="util" id="marketingVal">0%</span>
+      </div>
+      <button class="go" id="runScenario">Simulate</button>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h2>Baseline vs. Scenario Forecast</h2>
+        <div class="sub">Same 6-month horizon, side by side</div>
+        <canvas id="scenarioChart" height="110"></canvas>
+      </div>
+      <div class="card">
+        <h2>Projected Impact</h2>
+        <div class="sub">vs. baseline forecast, total over horizon</div>
+        <div class="scenario-impact" id="scenarioImpact">+0%</div>
+        <p style="font-size:13px; color:var(--muted); margin-top:10px;" id="scenarioImpactText"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- REPORTS -->
+  <section class="panel" id="reports">
+    <div class="card">
+      <h2>Export Forecast Report</h2>
+      <div class="sub">Generates a summary of current dashboard, forecast, and scenario data</div>
+      <p style="font-size:13px; color:var(--muted); max-width:560px;">
+        Reports bundle the historical summary, the active forecast (run it first under
+        the Forecast tab), and any scenario you've simulated. Choose a format below.
+      </p>
+      <div style="display:flex; gap:12px; margin-top:18px;">
+        <button class="go" id="exportCSV">Download CSV</button>
+        <button class="go" id="exportPrint" style="background:var(--sage);">Print / Save as PDF</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>LEDGER — DEMO BUILD · FORECASTS ARE ILLUSTRATIVE, GENERATED FROM SAMPLE OR UPLOADED DATA · NOT FINANCIAL ADVICE</footer>
+
+<script>
+// ---------- Sample data generation ----------
+const CATEGORIES = ['Apparel','Home Goods','Electronics','Seasonal & Gifts'];
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function seasonalFactor(monthIdx){
+  // Nov/Dec spike, summer dip
+  const factors = [0.92,0.88,0.95,0.98,1.0,0.97,0.95,0.97,1.0,1.05,1.25,1.35];
+  return factors[monthIdx];
+}
+
+function generateSampleData(){
+  const rows = [];
+  const today = new Date(2026,5,1); // June 2026
+  let base = 38000;
+  for(let i=23;i>=0;i--){
+    const d = new Date(today.getFullYear(), today.getMonth()-i, 1);
+    const mIdx = d.getMonth();
+    const trend = 1 + (23-i)*0.006; // slow growth over time
+    const seasonal = seasonalFactor(mIdx);
+    const promo = (mIdx===10 || mIdx===11 || Math.random()<0.12);
+    const promoMult = promo ? 1.18 : 1.0;
+    const noise = 0.94 + Math.random()*0.12;
+    CATEGORIES.forEach((cat, ci) => {
+      const catShare = [0.32,0.24,0.28,0.16][ci];
+      const revenue = Math.round(base * trend * seasonal * promoMult * noise * catShare);
+      const units = Math.round(revenue / (18 + ci*7));
+      rows.push({
+        date: d.toISOString().slice(0,7),
+        month: mIdx,
+        year: d.getFullYear(),
+        category: cat,
+        units_sold: units,
+        revenue: revenue,
+        promotion: promo
+      });
+    });
+  }
+  return rows;
+}
+
+let salesData = generateSampleData();
+let lastForecast = null;
+
+// ---------- Navigation ----------
+document.querySelectorAll('nav button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.panel).classList.add('active');
+  });
+});
+
+// ---------- Aggregation helpers ----------
+function monthlyTotals(data){
+  const map = {};
+  data.forEach(r=>{
+    if(!map[r.date]) map[r.date] = {date:r.date, month:r.month, year:r.year, revenue:0, promotion:false};
+    map[r.date].revenue += r.revenue;
+    map[r.date].promotion = map[r.date].promotion || r.promotion;
+  });
+  return Object.values(map).sort((a,b)=> a.date.localeCompare(b.date));
+}
+
+function fmtMoney(n){
+  return '$' + Math.round(n).toLocaleString();
+}
+
+// ---------- Dashboard ----------
+let historyChart, categoryChart, seasonalChart, forecastChartObj, scenarioChartObj;
+
+function renderDashboard(){
+  const monthly = monthlyTotals(salesData);
+  const totalRevenue = monthly.reduce((s,m)=>s+m.revenue,0);
+  const avg = totalRevenue / monthly.length;
+  const last12 = monthly.slice(-12).reduce((s,m)=>s+m.revenue,0);
+  const prev12 = monthly.slice(-24,-12).reduce((s,m)=>s+m.revenue,0);
+  const growth = prev12 ? ((last12-prev12)/prev12*100) : 0;
+
+  const catTotals = {};
+  salesData.filter(r=> monthly.slice(-12).some(m=>m.date===r.date)).forEach(r=>{
+    catTotals[r.category] = (catTotals[r.category]||0) + r.revenue;
+  });
+  const topCat = Object.entries(catTotals).sort((a,b)=>b[1]-a[1])[0];
+
+  document.getElementById('statRevenue').textContent = fmtMoney(totalRevenue);
+  document.getElementById('statRevenueDelta').textContent = '24-month total';
+  document.getElementById('statAvg').textContent = fmtMoney(avg);
+  document.getElementById('statAvgDelta').textContent = 'per month';
+  document.getElementById('statGrowth').textContent = (growth>=0?'+':'') + growth.toFixed(1) + '%';
+  document.getElementById('statGrowth').parentElement.querySelector('.delta').className = 'delta ' + (growth>=0?'up':'down');
+  document.getElementById('statGrowthDelta').textContent = 'trailing 12 vs prior 12';
+  document.getElementById('statTop').textContent = topCat[0];
+  document.getElementById('statTopDelta').textContent = fmtMoney(topCat[1]) + ' (12mo)';
+
+  const ctx1 = document.getElementById('historyChart');
+  if(historyChart) historyChart.destroy();
+  historyChart = new Chart(ctx1, {
+    type:'bar',
+    data:{
+      labels: monthly.map(m=> MONTH_NAMES[m.month] + " '" + String(m.year).slice(2)),
+      datasets:[{
+        label:'Revenue',
+        data: monthly.map(m=>m.revenue),
+        backgroundColor: monthly.map(m=> m.promotion ? '#b5532c' : '#c8b896'),
+        borderRadius:2
+      }]
+    },
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{ x:{ticks:{font:{family:'Courier New',size:9}}, grid:{display:false}}, y:{grid:{color:'#e6ddc8'}, ticks:{callback:v=>'$'+(v/1000)+'k'}} }
+    }
+  });
+
+  const catAgg = {};
+  CATEGORIES.forEach(c=>catAgg[c]=0);
+  salesData.filter(r=> monthly.slice(-12).some(m=>m.date===r.date)).forEach(r=> catAgg[r.category]+=r.revenue);
+  const ctx2 = document.getElementById('categoryChart');
+  if(categoryChart) categoryChart.destroy();
+  categoryChart = new Chart(ctx2, {
+    type:'doughnut',
+    data:{ labels:Object.keys(catAgg), datasets:[{ data:Object.values(catAgg), backgroundColor:['#b5532c','#5c6b4f','#c89b3c','#7a6b8a'] }] },
+    options:{ plugins:{ legend:{ position:'bottom', labels:{font:{family:'Courier New', size:10}} } } }
+  });
+
+  const seasonal = MONTH_NAMES.map((name,i)=> Math.round(seasonalFactor(i)*100));
+  const ctx3 = document.getElementById('seasonalChart');
+  if(seasonalChart) seasonalChart.destroy();
+  seasonalChart = new Chart(ctx3, {
+    type:'line',
+    data:{ labels: MONTH_NAMES, datasets:[{ label:'Seasonal Index', data:seasonal, borderColor:'#5c6b4f', backgroundColor:'rgba(92,107,79,0.15)', fill:true, tension:.35, pointRadius:3 }] },
+    options:{ plugins:{legend:{display:false}}, scales:{ y:{ grid:{color:'#e6ddc8'} }, x:{grid:{display:false}} } }
+  });
+}
+
+// ---------- Upload ----------
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+dropZone.addEventListener('click', ()=>fileInput.click());
+dropZone.addEventListener('dragover', e=>{e.preventDefault(); dropZone.style.borderColor='#b5532c';});
+dropZone.addEventListener('dragleave', ()=>{dropZone.style.borderColor='#d8cfba';});
+dropZone.addEventListener('drop', e=>{
+  e.preventDefault();
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e=>{
+  if(e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function handleFile(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const text = e.target.result;
+      const lines = text.trim().split('\n');
+      const headers = lines[0].split(',').map(h=>h.trim().toLowerCase());
+      const rows = [];
+      for(let i=1;i<lines.length;i++){
+        const parts = lines[i].split(',');
+        if(parts.length < headers.length) continue;
+        const obj = {};
+        headers.forEach((h,idx)=> obj[h]=parts[idx].trim());
+        const d = new Date(obj.date);
+        if(isNaN(d)) continue;
+        rows.push({
+          date: d.toISOString().slice(0,7),
+          month: d.getMonth(),
+          year: d.getFullYear(),
+          category: obj.category || 'Uncategorized',
+          units_sold: Number(obj.units_sold)||0,
+          revenue: Number(obj.revenue)||0,
+          promotion: /yes|true|1/i.test(obj.promotion||'')
+        });
+      }
+      if(rows.length){
+        salesData = rows;
+        document.getElementById('uploadStatus').textContent = `Loaded ${rows.length} rows from ${file.name}.`;
+        renderDashboard();
+        renderTable();
+        populateScenarioMonths();
+      } else {
+        document.getElementById('uploadStatus').textContent = 'Could not parse rows — check your CSV columns: date, category, units_sold, revenue, promotion.';
+      }
+    }catch(err){
+      document.getElementById('uploadStatus').textContent = 'Error reading file: ' + err.message;
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderTable(){
+  const tbody = document.querySelector('#dataTable tbody');
+  tbody.innerHTML = '';
+  salesData.slice(-10).reverse().forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.date}</td><td>${r.category}</td><td>${r.units_sold}</td><td>${fmtMoney(r.revenue)}</td>
+      <td><span class="pill ${r.promotion?'promo':'none'}">${r.promotion?'PROMO':'—'}</span></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ---------- Forecasting model ----------
+// Seasonal-naive + linear trend + promotion boost
+function buildForecast(horizonMonths, promoBoostPct, scenarioPromoMonth=null, marketingPct=0){
+  const monthly = monthlyTotals(salesData);
+  const n = monthly.length;
+  // linear trend via simple regression on last 12 points
+  const recent = monthly.slice(-12);
+  const xs = recent.map((_,i)=>i);
+  const ys = recent.map(m=>m.revenue);
+  const xMean = xs.reduce((a,b)=>a+b,0)/xs.length;
+  const yMean = ys.reduce((a,b)=>a+b,0)/ys.length;
+  let num=0, den=0;
+  xs.forEach((x,i)=>{ num += (x-xMean)*(ys[i]-yMean); den += (x-xMean)**2; });
+  const slope = den ? num/den : 0;
+  const intercept = yMean - slope*xMean;
+
+  // seasonal index from full history average per month
+  const seasonAvg = {};
+  const seasonCount = {};
+  monthly.forEach(m=>{
+    seasonAvg[m.month] = (seasonAvg[m.month]||0) + m.revenue;
+    seasonCount[m.month] = (seasonCount[m.month]||0) + 1;
+  });
+  const overallAvg = monthly.reduce((s,m)=>s+m.revenue,0)/monthly.length;
+  const seasonIndex = {};
+  for(let m=0;m<12;m++){
+    seasonIndex[m] = seasonAvg[m] ? (seasonAvg[m]/seasonCount[m]) / overallAvg : 1;
+  }
+
+  const lastDate = new Date(monthly[monthly.length-1].date + '-01');
+  const results = [];
+  for(let i=1;i<=horizonMonths;i++){
+    const d = new Date(lastDate.getFullYear(), lastDate.getMonth()+i, 1);
+    const mIdx = d.getMonth();
+    const trendVal = intercept + slope*(recent.length-1+i);
+    let value = trendVal * seasonIndex[mIdx];
+    let promoApplied = (mIdx===10 || mIdx===11); // default Nov/Dec promo assumption
+    if(scenarioPromoMonth !== null && mIdx === scenarioPromoMonth) promoApplied = true;
+    if(promoApplied) value *= (1 + promoBoostPct/100);
+    value *= (1 + marketingPct/100 * 0.4); // marketing spend partial pass-through
+    value = Math.max(value, 0);
+    results.push({
+      date: d.toISOString().slice(0,7),
+      label: MONTH_NAMES[mIdx] + " '" + String(d.getFullYear()).slice(2),
+      month: mIdx,
+      value: value,
+      low: value*0.92,
+      high: value*1.08,
+      promo: promoApplied
+    });
+  }
+  return { monthly, results };
+}
+
+function renderForecast(){
+  const horizon = Number(document.getElementById('horizonSelect').value);
+  const boost = Number(document.getElementById('promoBoost').value);
+  const { monthly, results } = buildForecast(horizon, boost);
+  lastForecast = results;
+
+  const histLabels = monthly.slice(-12).map(m=> MONTH_NAMES[m.month] + " '" + String(m.year).slice(2));
+  const histData = monthly.slice(-12).map(m=>m.revenue);
+  const forecastLabels = results.map(r=>r.label);
+  const forecastData = results.map(r=>r.value);
+
+  const ctx = document.getElementById('forecastChart');
+  if(forecastChartObj) forecastChartObj.destroy();
+  forecastChartObj = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels: [...histLabels, ...forecastLabels],
+      datasets:[
+        { label:'Actual', data:[...histData, ...Array(forecastLabels.length).fill(null)], borderColor:'#2b2620', backgroundColor:'#2b2620', tension:.3, pointRadius:3 },
+        { label:'Forecast', data:[...Array(histLabels.length-1).fill(null), histData[histData.length-1], ...forecastData], borderColor:'#b5532c', borderDash:[6,4], backgroundColor:'rgba(181,83,44,0.1)', tension:.3, pointRadius:3 },
+        { label:'High', data:[...Array(histLabels.length).fill(null), ...results.map(r=>r.high)], borderColor:'rgba(181,83,44,0.25)', pointRadius:0, borderWidth:1 },
+        { label:'Low', data:[...Array(histLabels.length).fill(null), ...results.map(r=>r.low)], borderColor:'rgba(181,83,44,0.25)', pointRadius:0, borderWidth:1 }
+      ]
+    },
+    options:{
+      plugins:{ legend:{ labels:{font:{family:'Courier New',size:10}} } },
+      scales:{ x:{grid:{display:false}, ticks:{font:{size:9}}}, y:{grid:{color:'#e6ddc8'}, ticks:{callback:v=>'$'+(v/1000)+'k'}} }
+    }
+  });
+
+  const tbody = document.querySelector('#forecastTable tbody');
+  tbody.innerHTML = '';
+  results.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.label}</td><td>${fmtMoney(r.value)}</td><td>${fmtMoney(r.low)}</td><td>${fmtMoney(r.high)}</td>
+      <td><span class="pill ${r.promo?'promo':'none'}">${r.promo?'YES':'NO'}</span></td>`;
+    tbody.appendChild(tr);
+  });
+
+  const totalForecast = results.reduce((s,r)=>s+r.value,0);
+  document.getElementById('driversText').innerHTML =
+    `Trend is derived from a linear regression over the last 12 months of actuals, multiplied by a
+    seasonal index built from this category's historical monthly pattern (holiday months index above 100).
+    Promotional months get a ${boost}% uplift applied on top. Total projected revenue across the next
+    ${horizon} months: <strong>${fmtMoney(totalForecast)}</strong>.`;
+
+  document.getElementById('confBadge').textContent = `Confidence band: ±8% · ${horizon}-month horizon`;
+}
+
+document.getElementById('runForecast').addEventListener('click', renderForecast);
+document.getElementById('horizonSelect').addEventListener('change', renderForecast);
+
+// ---------- Scenario simulator ----------
+function populateScenarioMonths(){
+  const sel = document.getElementById('scenarioMonth');
+  sel.innerHTML = '';
+  MONTH_NAMES.forEach((name,i)=>{
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = name;
+    sel.appendChild(opt);
+  });
+  sel.value = 3;
+}
+populateScenarioMonths();
+
+document.getElementById('marketingSlider').addEventListener('input', e=>{
+  document.getElementById('marketingVal').textContent = (e.target.value>=0?'+':'') + e.target.value + '%';
+});
+
+document.getElementById('runScenario').addEventListener('click', ()=>{
+  const horizon = 6;
+  const boost = Number(document.getElementById('promoBoost').value) || 15;
+  const promoMonth = Number(document.getElementById('scenarioMonth').value);
+  const marketingPct = Number(document.getElementById('marketingSlider').value);
+
+  const baseline = buildForecast(horizon, boost).results;
+  const scenario = buildForecast(horizon, boost, promoMonth, marketingPct).results;
+
+  const ctx = document.getElementById('scenarioChart');
+  if(scenarioChartObj) scenarioChartObj.destroy();
+  scenarioChartObj = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: baseline.map(r=>r.label),
+      datasets:[
+        { label:'Baseline', data: baseline.map(r=>r.value), backgroundColor:'#c8b896', borderRadius:2 },
+        { label:'Scenario', data: scenario.map(r=>r.value), backgroundColor:'#b5532c', borderRadius:2 }
+      ]
+    },
+    options:{
+      plugins:{ legend:{ labels:{font:{family:'Courier New',size:10}} } },
+      scales:{ x:{grid:{display:false}}, y:{grid:{color:'#e6ddc8'}, ticks:{callback:v=>'$'+(v/1000)+'k'}} }
+    }
+  });
+
+  const baseTotal = baseline.reduce((s,r)=>s+r.value,0);
+  const scenTotal = scenario.reduce((s,r)=>s+r.value,0);
+  const impact = ((scenTotal-baseTotal)/baseTotal*100);
+  document.getElementById('scenarioImpact').textContent = (impact>=0?'+':'') + impact.toFixed(1) + '%';
+  document.getElementById('scenarioImpact').style.color = impact>=0 ? '#5c6b4f' : '#b5532c';
+  document.getElementById('scenarioImpactText').textContent =
+    `Adding a promotion in ${MONTH_NAMES[promoMonth]} and adjusting marketing spend by ${marketingPct}% changes
+    the ${horizon}-month forecast total from ${fmtMoney(baseTotal)} to ${fmtMoney(scenTotal)}.`;
+});
+
+// ---------- Reports ----------
+document.getElementById('exportCSV').addEventListener('click', ()=>{
+  const data = lastForecast || buildForecast(6, 15).results;
+  let csv = 'month,forecast_revenue,low,high,promotion\n';
+  data.forEach(r=> csv += `${r.label},${Math.round(r.value)},${Math.round(r.low)},${Math.round(r.high)},${r.promo}\n`);
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'sales_forecast.csv'; a.click();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('exportPrint').addEventListener('click', ()=> window.print());
+
+// ---------- Init ----------
+renderDashboard();
+renderTable();
+renderForecast();
+</script>
+</body>
+</html>
